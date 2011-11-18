@@ -1,0 +1,336 @@
+
+This is the source file from which the README file is generated.
+
+This file is written in Perl's Plain Old Documentation (POD) format.
+Run the following Perl commands to convert it to text or to HTML
+for easy reading:
+
+  podchecker README.pod  # Optional, check syntax.
+  pod2text README.pod >README.txt
+
+  # pod2html seems buggy, at least in perl v5.10.1, therefore
+  # I'm using this long one-liner instead (with bash):
+  perl -MPod::Simple::HTML  -e "\$p = Pod::Simple::HTML->new; \$p->index( 1 ); \$p->output_fh( *STDOUT{IO} ); \$p->force_title('UART DPI'); \$p->parse_file('README.pod');"  >README.html
+
+This file is best edited with emacs module pod-mode, available in CPAN.
+However, the POD syntax is quite simple and can be edited with a standard text editor.
+
+=pod
+
+=head1 DPI module for UART-based console interaction with Verilator simulations
+
+=head2 Introduction
+
+Version 0.80 beta, November 2011.
+
+When you start developing a new System-on-a-Chip (SoC) in Verilog for an FPGA (for example),
+a serial port comes in very handy, as it is easy to implement and it allows you to interact with the system
+under development right from the start.
+You just fire up your favourite console software and watch the various progress messages during the SoC boot phase.
+After booting, it is also helpful to be able to send at least simple keystrokes in order to
+display system information or trigger particular tests.
+
+This DPI module provides such a bidirectional serial port interaction for L<< Verilator|http://www.veripool.org/ >>
+simulations. The simulated SoC becomes a serial port with a familiar 16550 UART interface, the UART registers are
+available as memory locations on a Wishbone slave interface. The host system where the simulation runs
+creates a listening TCP port you can connect to with a text console client like telnet or socat.
+
+The TCP connection acts as a virtual serial port cable. Data is transferred between the
+simulated UART and the TCP port on a byte basis, that is, the bits are not serialised
+through single Tx and Rx pins like a real UART would do. There is no data translation
+or conversion whatsoever, the user must implement any higher-level protocols (like telnet) himself.
+
+=head3 Support for multiple simulated serial ports
+
+You can create as many simulated serial ports as you like, which allows you to write
+different types of event log messages to separate consoles.
+Any messages generated with Verilog's $display() task will of course be kept separate in the standard simulation console.
+
+Each simulated serial port needs a different base memory address for its UART registers and a different TCP port number
+to listen on, and operates completely independently from its siblings. You can connect to and disconnect from
+those simulated ports at any point in time during the simulation.
+You can then connect to several of them simultaneously, and you can also run the simulation
+on another computer and access them over the TCP/IP network (see parameter I<< listen_on_local_addr_only >>).
+
+=head2 How the module works
+
+=head3 Transmit side (UART to TCP)
+
+The C++ side of the UART DPI module has a transmit ring buffer that is normally much bigger
+than the standard 16 FIFO bytes in a real 16550 UART, the default buffer size is actually 100 KB.
+
+When the simulation writes a byte to the UART registers, this byte is sent directly
+to the C++ transmit queue, as there is no simulated UART FIFO on the Verilog side.
+This is why, to the simulated SoC, the virtual UART seems to be much faster than a real one.
+Enabling or disabling the UART FIFOs has no effect, there is always a transmit buffer on the C++ side.
+
+A "transmit FIFO full" condition is never reported on the simulated UART. If the transmit buffer fills up
+and the TCP socket transmit buffer is also full (because the TCP client is not reading any more),
+old data bytes will be discarded in a standard FIFO fashion. The SoC simulation will never stop.
+
+Note that data is stored in the transmit buffer even if there is no TCP client currently connected.
+When a TCP client connects, it will start receiving from the first byte ever sent
+(provided that the buffer did not overflow).
+Similarly, if a client loses the TCP connection and then reconnects, all data buffered in the meantime
+will still be received, as if there had been no disconnection at all. Clearing the UART transmit FIFO
+has no effect.
+
+This buffering behaviour has advantages and disadvantages. If a serial console is used for logging purposes,
+there may be a lot of data to receive upcon reconnection. In this case, you should probably
+use a small transmit buffer size, so that only a limited amount of old log messages are kept in the buffer. 
+
+If the transmitted UART data were to be discarded when no TCP client is connected, which
+more closely resembles real UART behaviour, it would be hard to guarantee that the first bytes
+are always received. Unlike real serial ports, which are always present,
+the listening TCP socket is created when the simulation starts, so the TCP client
+has to be launched afterwards, either from the same simulation start-up code
+or manually by the user.
+
+Most TCP clients (like telnet) provide no programmatic indication when they successfully establish the connection, so,
+if the simulation is small and starts quickly, the first bytes will get lost before the child process
+has time to start and connect. This will happen even if the TCP client is started automatically by
+the simulation right after creating the listening socket.
+
+The current buffering behaviour could be improved in the following ways:
+
+=over
+
+=item * The simulation could optionally wait on start-up until the first TCP client connects.
+
+The drawback would be slightly slower simulation start-up times. 
+
+=item * There could be a permanently-running server that makes sure the listening TCP port is always available.
+
+A TCP client would only need to be started once, like it is already the case for real serial ports.
+Starting and stopping a simulation would then have no effect on the client. The drawback would be the need
+to keep a background relay process running the whole time. Such a server process will probably need
+to be configured upfront, so that it knows what UARTs will be coming later.
+
+=item * There could be an option to wait until the TCP client reads all data.
+
+This would make the simulation slower, but would prevent any data loss.
+
+=item * There could be an option to buffer only until the first TCP connection.
+
+If the user closes the connection and reconnects later, the bytes sent in the meantime could
+then be discarded.
+
+=back
+
+=head3 Receive side (TCP to UART)
+
+In a real UART, bytes will be lost if the software does not remove them fast enough from the receive FIFO.
+However, in the simulated UART the receive buffer is large (100 KB by default)
+and has no read time-out. If the receive buffer fills up, the TCP socket will not be read any more,
+which effectively provides incoming flow control.
+
+Enabling or disabling the UART FIFOs has no effect, there is always a receive buffer on the C++ side.
+
+Error conditions like "FIFO overrun" or "wrong parity" are never reported on the simulated UART,
+as TCP is a byte-oriented protocol and leaves no room for such receive errors.
+Clearing the UART receive FIFO has no effect, the existing incoming data will remain in the receive buffer.
+
+=head2 Connecting to the TCP socket
+
+The UART serial port data is available as a raw TCP stream.
+
+For most clients listed below, your SoC software will probably need to send [CR, LF] ("\r\n", ASCII 0x0D 0x0A)
+as end-of-line characters, as a simple LF ("\n") will not do.
+
+Here are some raw TCP text console clients you can use:
+
+=over
+
+=item * telnet
+
+For a quick test, you can connect like this:
+
+  telnet localhost 5678
+
+However, unless your SoC software implements a real telnet server,
+it will not work properly in all cases.
+
+When used with network ports other than number 23, telnet operates in a
+raw data mode, but it will still react to some special command sequences.
+There are other network virtual terminal (NVT) rules,
+such as the requirement for a bare carriage return character (CR, ASCII 0x0D)
+to be followed by a NULL (ASCII 0) character, that distinguish the telnet protocol
+from raw TCP sessions.
+
+It can be difficult to find the right key combination to enter the escape sequence
+that allows you to quit the telnet session. Stopping the simulation will do the trick,
+as that will tear down the socket and cause telnet to quit.
+You can also kill the telnet process from another console.
+
+=item * socat
+
+You can try the following:
+
+  socat READLINE TCP4:localhost:5678
+
+This provides comfortable readline-base line editing, like a bash shell does.
+Text is only sent to the UART when you press the ENTER key though.
+Use Ctrl+C or Ctrl+D to exit. This means of course that such key combinations
+cannot be sent over to the UART.
+
+An alternative is:
+
+  socat -,raw TCP4:localhost:5678
+
+This sends all keystrokes straight away, including Ctrl+C and the like.
+Exiting socat can be challenging. Stopping the simulation will cause
+it to quit. You can of course kill the socat process from another console.
+
+A nice trick is to start socat in a separate window, as closing the window
+will also terminate socat. For example:
+
+  gnome-terminal --command "sh -c 'socat -,raw TCP4:localhost:5678'" &
+
+=item * Putty
+
+If you prefer a graphical tool, Putty comes with most Linux distributions
+and is also available for Windows. Look for the following options:
+
+  Host name: localhost
+  Port: 5678
+  Connection type: raw
+
+You may want to adjust options "Terminal / Line discipline",
+"echo" and "local line editing" to suit your needs.
+
+=item * Other tools
+
+There are many other tools out there which can also do raw TCP, like nc (I<< netcat >>) or I<< screen >>.
+
+I<< netcat >> can also store incoming data in a file like this:
+
+  nc localhsot 23000 >filename.txt
+
+I<< remtty >> connects to a TCP port on another machine and makes that connection available through a local pseudo tty(pty).
+
+=back
+
+=head3 Automating the connection from Verilog
+
+You may find it very convenient to automatically launch a TCP text console at the start of each simulation,
+just add a I<< $system >> call to some I<< initial >> section in your Verilog source code.
+
+If you are using I<< Verilator >> and your version still does not have a I<< $system >> task (or similar),
+I have written a I<< Run Shell Command DPI module >> as a replacement,
+it should be available in the same website as this UART DPI module.
+Here is a usage example:
+
+  initial
+  begin
+    int shell_cmd_exit_code;
+
+    if ( 0 != run_shell_command_dpi( shell_cmd_exit_code,
+                                     "gnome-terminal --command \"sh -c 'socat READLINE TCP4:localhost:%d'\" &",
+                                     `MY_TCP_PORT ) )
+      begin
+         $display("Error trying to start the shell command.");
+         $finish;
+      end;
+
+    if ( 0 != shell_cmd_exit_code )
+      begin
+         $display( "The shell command exited with a non-zero status code." );
+         $finish;
+      end;
+  end
+
+=head2 Caveats
+
+=head3 No accurate 16550 UART timing
+
+This module was designed for human interaction with a text console.
+The data bytes are not serialised like in real serial ports,
+and the baud rate setting is completely ignored.
+
+The simulated SoC sees an extremely fast UART that is always
+willing to take new data bytes.
+Therefore, any software that is sensitive to UART timing will not work properly.
+
+The I<< Character Timeout >> interrupt is partially implemented. Parameter
+I<< character_timeout_clk_count >> in the Verilog source code controls
+how many clock ticks to wait for between Receive Buffer Register reads
+in order to generate this interrupt.
+Therefore, you can replicate the 16550 UART timing by calculating the right value
+according to your wishbone clock rate and your target serial baud rate.
+There is no time-out associated to the data coming from the TCP connection,
+only RBR reads can reset the time-out timer.
+
+=head3 Some 16550 UART features are not implemented or may not work as intended
+
+=over
+
+=item * There is no MODEM support at all.
+
+=item * Most UART serial port settings are ignored.
+
+There is no baud rate, stop bit configuration, parity bit and so on. All bytes have always 8 bits.
+
+=back
+
+=head2 Status of this software
+
+This is beta sofware and has not been thoroughly tested.
+Besides, I am no UART expert, so there may be some rough edges left.
+Your feedback will be greatly appreciated.
+Testers with UART 16550 experience are specially welcome.
+
+Note that the current version has been developed and tested only on Linux.
+
+This package is implemented as a SystemVerilog DPI module, SystemC is not used or required.
+I have only tested it with Verilator, but there's nothing Verilator-specific, so it should
+be possible to run it on any standard simulator.
+
+I don't have access to other commercial simulators to test the UART DPI module on,
+help is welcome. Cygwin and BSD maintainers are also welcome.
+
+=head2 Installation instructions
+
+You need to be familiar with Verilator or your simulator of choice,
+as you need to add file I<< uart_dpi.cpp >> to the generated C++ code. There are a few ways to do that:
+
+  Alternative 1) Add uart_dpi.cpp to the Verilator command line.
+  Alternative 2) Include uart_dpi.cpp from your main .cpp file (with #include).
+  Alternative 3) Edit the makefile you are using.
+
+You also need to add file I<< uart_dpi.v >> to the Verilog sources and connect
+its Verilog module to some Wishbone master. Here is an instantiation example:
+
+  uart_dpi
+    #( .tcp_port(5678),
+       .port_name("UART DPI number 2"),
+       .welcome_message( "--- Welcome to my second UART DPI port ---\n\r" )
+     )
+  uart_dpi_instance2
+  (
+	// WISHBONE common
+	.wb_clk_i	( wb_clk ), 
+	.wb_rst_i	( wb_rst ),
+
+	// WISHBONE slave
+	.wb_adr_i	( wb_us2_adr_i[4:0] ),
+	.wb_dat_i	( wb_us2_dat_i ),
+	.wb_dat_o	( wb_us2_dat_o ),
+	.wb_we_i	( wb_us2_we_i  ),
+	.wb_stb_i	( wb_us2_stb_i ),
+	.wb_cyc_i	( wb_us2_cyc_i ),
+	.wb_ack_o	( wb_us2_ack_o ),
+	.wb_sel_i	( wb_us2_sel_i ),
+
+	// Interrupt request
+	.int_o		( pic_ints[`APP_INT_UART2] )
+   );
+
+=head2 License
+
+Copyright (C) R. Diez 2011,  rdiezmail-openrisc at yahoo.de
+
+The UART DPI source code is released under the LGPL 3 license.
+
+This document is released under the Creative Commons Attribution-ShareAlike 3.0 Unported (CC BY-SA 3.0) license.
+
+=cut
