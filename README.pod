@@ -132,7 +132,8 @@ Clearing the UART receive FIFO has no effect, the existing incoming data will re
 
 =head2 Connecting to the TCP socket
 
-The UART serial port data is available as a raw TCP stream.
+The UART serial port data is available as a raw TCP stream. Note that there is no security checks at all,
+any user logged on to the local computer can connect to the TCP socket.
 
 For most clients listed below, your SoC software will probably need to send [CR, LF] ("\r\n", ASCII 0x0D 0x0A)
 as end-of-line characters, as a simple LF ("\n") will not do.
