@@ -217,7 +217,7 @@ module uart_dpi ( input  wire wb_clk_i,
 
    // The Wishbone bus is 32-bit wide, so we need to place the 8 bits we return at the right location.
    function bit [`UART_DPI_DATA_WIDTH-1:0] get_data_to_return;
-      input [3:0]                      sel;
+      input [3:0] sel;
       input [7:0] data;
       begin
 		 case ( sel )
@@ -599,9 +599,11 @@ module uart_dpi ( input  wire wb_clk_i,
            
            // Calculate the interrupt request signal, which is independent of the Wishbone bus.
            
-           receive_data_available_interrupt_pending = ( received_byte_count >= get_trigger_level( uart_reg_fcr ) ) && uart_reg_ier[ `UART_DPI_IER_RDA ];
+           receive_data_available_interrupt_pending = uart_reg_ier[ `UART_DPI_IER_RDA ] &&
+                                                      ( received_byte_count >= get_trigger_level( uart_reg_fcr ) );
 
-           character_timeout_interrupt_pending = ( received_byte_count >= 1 ) &&
+           character_timeout_interrupt_pending = uart_reg_ier[ `UART_DPI_IER_RDA ] &&
+                                                 ( received_byte_count >= 1 ) &&
                                                  ( last_rcvr_fifo_read_clk_counter == 0 ) &&
                                                  uart_reg_fcr[`UART_DPI_FCR_FIFO_ENABLE_BIT];
 
