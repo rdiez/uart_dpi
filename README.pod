@@ -326,6 +326,9 @@ its Verilog module to some Wishbone master. Here is an instantiation example:
 	.int_o		( pic_ints[`APP_INT_UART2] )
    );
 
+See file I<< uart_example.c >> for  example code in C of how to the drive the UART
+from the simulated processor. Note that you should be able to use any existing 16550 UART code as well.
+
 =head2 License
 
 Copyright (C) R. Diez 2011,  rdiezmail-openrisc at yahoo.de
