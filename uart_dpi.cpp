@@ -739,6 +739,9 @@ int uart_dpi_create ( const int tcp_port,
                       const char * const informational_message_prefix,
                       long long * const obj )
 {
+  *obj = 0;  // In case of error, return the equivalent of NULL.
+             // Otherwise, the 'final' Verilog section must check whether uart_dpi_create() failed before calling uart_dpi_destroy().
+
   uart_dpi * this_obj = NULL;
   
   try
@@ -750,6 +753,9 @@ int uart_dpi_create ( const int tcp_port,
                              welcome_message,
                              print_informational_messages,
                              informational_message_prefix );
+
+    // Here there was something else in the past, that's the reason
+    // behind the delete in the catch section.
   }
   catch ( const std::exception & e )
   {
