@@ -122,10 +122,10 @@ module uart_dpi ( input  wire wb_clk_i,
                                                  input string   informational_message_prefix,
                                                  output longint obj );
 
-   import "DPI-C" function int uart_dpi_send    ( longint obj, input  byte character );
-   import "DPI-C" function int uart_dpi_receive ( longint obj, output byte character );
+   import "DPI-C" function int uart_dpi_send    ( input longint obj, input  byte character );
+   import "DPI-C" function int uart_dpi_receive ( input longint obj, output byte character );
 
-   import "DPI-C" function int uart_dpi_tick ( longint obj, output int received_byte_count );
+   import "DPI-C" function int uart_dpi_tick ( input longint obj, output int received_byte_count );
 
    // It is not necessary to call uart_dpi_destroy(). However, calling it
    // will release all resources associated with the UART DPI instance, and that can help
