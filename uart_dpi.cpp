@@ -27,11 +27,15 @@
    from http://www.gnu.org/licenses/
 */
 
-#include "Vminsoc_bench_core.h"
+// NOTE: The Verilator-generated forward declarations of the DPI methods like uart_dpi_create()
+//       must be visible to this file. If you are compiling this file as a standalone module,
+//       you will have to include here the apropriate Verilator-generated header file.
+//       Example:  #include "Vminsoc_bench_core__Dpi.h"
 
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -150,12 +154,78 @@ static std::string get_error_message ( const char * const prefix_msg,
 }
 
 
+static void close_a ( const int fd )
+{
+  for ( ; ; )
+  {
+    const int res = close( fd );
+
+    if ( res == -1 && errno == EINTR )
+        continue;
+
+    assert( res == 0 );
+    
+    break;
+  }
+}
+
+
+static ssize_t send_eintr ( const int sockfd,
+                            const void * const buf,
+                            const size_t len,
+                            const int flags )
+{
+  for ( ; ; )
+  {
+    const ssize_t ret = send( sockfd, buf, len, flags );
+
+    if ( ret == -1 && errno == EINTR )
+      continue;
+
+    return ret;
+  }
+}
+
+
+static ssize_t recv_eintr ( const int sockfd,
+                            void * const buf,
+                            const size_t len,
+                            const int flags )
+{
+  for ( ; ; )
+  {
+    const ssize_t ret = recv( sockfd, buf, len, flags );
+
+    if ( ret == -1 && errno == EINTR )
+      continue;
+
+    return ret;
+  }
+}
+
+
+static int accept4_eintr ( const int sockfd,
+                           struct sockaddr * const addr,
+                           socklen_t * const addrlen,
+                           const int flags )
+{
+  for ( ; ; )
+  {
+    const ssize_t ret = accept4( sockfd, addr, addrlen, flags );
+
+    if ( ret == -1 && errno == EINTR )
+      continue;
+
+    return ret;
+  }
+}
+
+
 void uart_dpi::close_current_connection ( void )
 {
   assert( m_connectionSocket != -1 );
   
-  if ( -1 == close( m_connectionSocket ) )
-    assert( false );
+  close_a( m_connectionSocket );
   
   m_connectionSocket = -1;
 }
@@ -163,11 +233,11 @@ void uart_dpi::close_current_connection ( void )
 
 void uart_dpi::send_byte ( const uint8_t data )
 {
-  if ( -1 == send( m_connectionSocket,
-                   &data,
-                   sizeof(data),
-                   0  // No special flags. MSG_DONTWAIT not needed, for the socket is in SOCK_NONBLOCK mode.
-                 ) )
+  if ( -1 == send_eintr( m_connectionSocket,
+                         &data,
+                         sizeof(data),
+                         0  // No special flags. MSG_DONTWAIT not needed, for the socket is in SOCK_NONBLOCK mode.
+                         ) )
   {
     throw std::runtime_error( get_error_message( "Error sending data: ", errno ) );
   }
@@ -198,8 +268,7 @@ void uart_dpi::close_listening_socket ( void )
 {
   assert( m_listening_socket != -1 );
 
-  if ( -1 == close( m_listening_socket ) )
-    assert( false );
+  close_a( m_listening_socket );
 
   m_listening_socket = -1;
 }
@@ -285,40 +354,48 @@ void uart_dpi::accept_connection ( void )
 {
   assert( m_listening_socket != -1 );
 
-  pollfd polledFd;
-
-  polledFd.fd      = m_listening_socket;
-  polledFd.events  = POLLIN | POLLERR;
-  polledFd.revents = 0;
-
-  const int pollRes = poll( &polledFd, 1, 0 );
-
-  if ( pollRes == 0 )
+  for ( ; ; )
   {
-    // No incoming connection is yet there.
-    return;
-  }
+    pollfd polled_fd;
+
+    polled_fd.fd      = m_listening_socket;
+    polled_fd.events  = POLLIN | POLLERR;
+    polled_fd.revents = 0;
+
+    const int poll_res = poll( &polled_fd, 1, 0 );
+
+    if ( poll_res == 0 )
+    {
+      // No incoming connection is yet there.
+      return;
+    }
   
-  if ( pollRes == -1 )
-  {
-    throw std::runtime_error( get_error_message( "Error polling the listening socket: ", errno ) );
-  }
+    if ( poll_res == -1 )
+    {
+      if ( errno == EINTR )
+        continue;
+      
+      throw std::runtime_error( get_error_message( "Error polling the listening socket: ", errno ) );
+    }
 
-  assert( pollRes == 1 );
+    assert( poll_res == 1 );
+    
+    break;
+  }
 
   if ( m_print_informational_messages )
   {
-    // printf( "%sPoll result flags: 0x%02X\n", polledFd.revents, m_informational_message_prefix.c_str() );
+    // printf( "%sPoll result flags: 0x%02X\n", polled_fd.revents, m_informational_message_prefix.c_str() );
     // fflush( stdout );
   }
-    
+
   sockaddr_in remoteAddr;
   socklen_t remoteAddrLen = sizeof( remoteAddr );
 
-  const int connectionSocket = accept4( m_listening_socket,
-                                        (sockaddr *) &remoteAddr,
-                                        &remoteAddrLen,
-                                        SOCK_NONBLOCK | SOCK_CLOEXEC );
+  const int connectionSocket = accept4_eintr( m_listening_socket,
+                                              (sockaddr *) &remoteAddr,
+                                              &remoteAddrLen,
+                                              SOCK_NONBLOCK | SOCK_CLOEXEC );
 
   // Any errors accepting a connection are considered non-critical and do not normally stop the simulation,
   // as the remote client can try to reconnect at a later point in time.
@@ -355,8 +432,7 @@ void uart_dpi::accept_connection ( void )
     
     if ( connectionSocket != -1 )
     {
-      if ( -1 == close( connectionSocket ) )
-        assert( false );
+      close_a( connectionSocket );
     }
 
     return;
@@ -562,23 +638,33 @@ void uart_dpi::transmit_data ( void )
 
   while ( !is_transmit_buffer_empty() || m_welcome_message_pos != -1 )
   {
-    pollfd polledFd;
-
-    polledFd.fd      = m_connectionSocket;
-    polledFd.events  = POLLOUT | POLLERR;
-    polledFd.revents = 0;
-
-    const int pollRes = poll( &polledFd, 1, 0 );
-
-    if ( pollRes == -1 )
+    int poll_res;
+    
+    for ( ; ; )
     {
-      throw std::runtime_error( get_error_message( "Error polling the connection socket: ", errno ) );
+      pollfd polled_fd;
+
+      polled_fd.fd      = m_connectionSocket;
+      polled_fd.events  = POLLOUT | POLLERR;
+      polled_fd.revents = 0;
+
+      poll_res = poll( &polled_fd, 1, 0 );
+
+      if ( poll_res == -1 )
+      {
+        if ( errno == EINTR )
+          continue;
+
+        throw std::runtime_error( get_error_message( "Error polling the connection socket: ", errno ) );
+      }
+
+      break;
     }
 
-    if ( pollRes == 0 )
+    if ( poll_res == 0 )
       break;
 
-    assert( pollRes == 1 );
+    assert( poll_res == 1 );
 
     uint8_t byte_to_send;
 
@@ -619,31 +705,41 @@ void uart_dpi::receive_data ( void )
 
   while ( !is_receive_buffer_full() )
   {
-    pollfd polledFd;
-
-    polledFd.fd      = m_connectionSocket;
-    polledFd.events  = POLLIN | POLLERR;
-    polledFd.revents = 0;
-
-    const int pollRes = poll( &polledFd, 1, 0 );
-
-    if ( pollRes == -1 )
+    int poll_res;
+    
+    for ( ; ; )
     {
-      throw std::runtime_error( get_error_message( "Error polling the connection socket: ", errno ) );
+      pollfd polled_fd;
+
+      polled_fd.fd      = m_connectionSocket;
+      polled_fd.events  = POLLIN | POLLERR;
+      polled_fd.revents = 0;
+
+      poll_res = poll( &polled_fd, 1, 0 );
+
+      if ( poll_res == -1 )
+      {
+        if ( errno == EINTR )
+          continue;
+        
+        throw std::runtime_error( get_error_message( "Error polling the connection socket: ", errno ) );
+      }
+      
+      break;
     }
 
-    if ( pollRes == 0 )
+    if ( poll_res == 0 )
       return;
 
-    assert( pollRes == 1 );
+    assert( poll_res == 1 );
 
     uint8_t received_data;
 
-    const ssize_t received_byte_count = recv( m_connectionSocket,
-                                              &received_data,
-                                              1, // Receive just 1 byte.
-                                              0  // No special flags.
-                                              );
+    const ssize_t received_byte_count = recv_eintr( m_connectionSocket,
+                                                    &received_data,
+                                                    1, // Receive just 1 byte.
+                                                    0  // No special flags.
+                                                    );
     if ( received_byte_count == 0 )
     {
       if ( m_print_informational_messages )
