@@ -476,7 +476,9 @@ void uart_dpi::enqueue_receive_byte ( const uint8_t character )
 {
   assert( !is_receive_buffer_full() );
 
-  m_receive_buffer[ m_receive_write_pointer  ] = character;
+  assert( m_receive_write_pointer < m_receive_buffer_size );
+  m_receive_buffer[ m_receive_write_pointer ] = character;
+
   ++m_receive_write_pointer;
   m_receive_write_pointer %= m_receive_buffer_size;
 }
@@ -485,7 +487,9 @@ uint8_t uart_dpi::deque_receive_byte ( void )
 {
   assert( !is_receive_buffer_empty() );
   
+  assert( m_receive_read_pointer < m_receive_buffer_size );
   const uint8_t b = m_receive_buffer[ m_receive_read_pointer ];
+
   ++m_receive_read_pointer;
   m_receive_read_pointer %= m_receive_buffer_size;
   return b;
@@ -520,8 +524,10 @@ bool uart_dpi::is_transmit_buffer_empty ( void )
 uint8_t uart_dpi::deque_transmit_byte ( void )
 {
   assert( !is_transmit_buffer_empty() );
-  
+
+  assert( m_transmit_read_pointer < m_transmit_buffer_size );
   const uint8_t b = m_transmit_buffer[ m_transmit_read_pointer ];
+
   ++m_transmit_read_pointer;
   m_transmit_read_pointer %= m_transmit_buffer_size;
   return b;
@@ -807,7 +813,9 @@ void uart_dpi::send_char ( const char character )
     assert( ! is_transmit_buffer_full() );
   }
 
-  m_transmit_buffer[ m_transmit_write_pointer  ] = character;
+  assert( m_transmit_write_pointer < m_transmit_buffer_size );
+  m_transmit_buffer[ m_transmit_write_pointer ] = character;
+
   ++m_transmit_write_pointer;
   m_transmit_write_pointer %= m_transmit_buffer_size;
 }
@@ -894,6 +902,9 @@ int uart_dpi_send ( const long long obj, const char character )
   {
     uart_dpi * const this_obj = (uart_dpi *)obj;
 
+    if ( this_obj == NULL )
+      throw std::runtime_error( "Invalid obj parameter." );
+
     this_obj->send_char( character );
   }
   catch ( const std::exception & e )
@@ -918,6 +929,9 @@ int uart_dpi_receive ( const long long obj, char * const character )
   try
   {
     uart_dpi * const this_obj = (uart_dpi *)obj;
+
+    if ( this_obj == NULL )
+      throw std::runtime_error( "Invalid obj parameter." );
 
     *character = this_obj->receive();
   }
@@ -944,6 +958,9 @@ int uart_dpi_tick ( const long long obj,
   try
   {
     uart_dpi * const this_obj = (uart_dpi *)obj;
+
+    if ( this_obj == NULL )
+      throw std::runtime_error( "Invalid obj parameter." );
 
     this_obj->tick( received_byte_count );
   }
