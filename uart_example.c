@@ -101,7 +101,7 @@ static void init_uart ( const uint32_t uart_base_addr )
 }
 
 
-void wait_for_transmit ( const uint32_t uart_base_addr )
+static void wait_for_transmit ( const uint32_t uart_base_addr )
 {
     unsigned char lsr;
     
@@ -187,7 +187,7 @@ static void uart_1_interrupt ( void * const context )
 }
 
 
-int main()
+int main ( void )
 {
     // The simulation has 2 UARTs:
     // - UART 1 is an echo console, it echoes everything it receives back to the client.
