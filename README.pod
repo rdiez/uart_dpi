@@ -226,7 +226,7 @@ Here is a usage example:
     int shell_cmd_exit_code;
 
     if ( 0 != run_shell_command_dpi( shell_cmd_exit_code,
-                                     "gnome-terminal --command \"sh -c 'socat READLINE TCP4:localhost:%d'\" &",
+                                     "gnome-terminal --command \"sh -c 'socat READLINE TCP4:localhost:%0d'\" &",
                                      `MY_TCP_PORT ) )
       begin
          $display("Error trying to start the shell command.");
