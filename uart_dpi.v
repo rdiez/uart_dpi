@@ -434,7 +434,7 @@ module uart_dpi ( input  wire wb_clk_i,
                        // is remembered and returned at this point.
                        $display( "%sThe client is trying to receive a character, but the FIFO is empty.", `UART_DPI_ERROR_PREFIX );
                        $finish;
-                       // data_to_return = 0;
+                       data_to_return = 0;  // Prevents C++ compilation warning under Verilator.
                     end
                   else if ( 0 != uart_dpi_receive( obj, data_to_return ) )
                     begin
