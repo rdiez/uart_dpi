@@ -298,6 +298,9 @@ as you need to add file I<< uart_dpi.cpp >> to the generated C++ code. There are
   Alternative 2) Include uart_dpi.cpp from your main .cpp file (with #include).
   Alternative 3) Edit the makefile you are using.
 
+Your main routine should ignore or properly handle signal SIGPIPE. Otherwise, the simulation may get killed
+by this signal if the remote end (the console client) closes the connection unexpectedly.
+
 You also need to add file I<< uart_dpi.v >> to the Verilog sources and connect
 its Verilog module to some Wishbone master. Here is an instantiation example:
 
