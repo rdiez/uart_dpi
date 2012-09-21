@@ -142,11 +142,8 @@ static std::string get_error_message ( const char * const prefix_msg,
   }
   else
   {
-    // Always terminate the string, just in case. Note that the string
-    // may not actually be in the buffer, see the strerror_r() documentation.
-    buffer[ sizeof( buffer ) / sizeof( buffer[0] ) - 1 ] = '\0';
-    assert( strlen( buffer ) < sizeof( buffer ) );
-    
+    // According to the strerror_r() documentation, if the string lands in the buffer,
+    // it may be truncated, but it always includes a terminating null byte.
     str << err_msg;
   }
   
