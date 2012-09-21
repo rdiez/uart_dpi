@@ -1,32 +1,33 @@
 
 /* Version 0.80 beta, November 2011.
- 
+
   See the README file for information about this module.
-  
+
   Copyright (c) 2011 R. Diez
 
-  This source file may be used and distributed without        
-  restriction provided that this copyright statement is not   
-  removed from the file and that any derivative work contains 
+  This source file may be used and distributed without
+  restriction provided that this copyright statement is not
+  removed from the file and that any derivative work contains
   the original copyright notice and the associated disclaimer.
-                                                             
-  This source file is free software; you can redistribute it  
-  and/or modify it under the terms of the GNU Lesser General  
+
+  This source file is free software; you can redistribute it
+  and/or modify it under the terms of the GNU Lesser General
   Public License version 3 as published by the Free Software Foundation.
-                                                             
-  This source is distributed in the hope that it will be      
-  useful, but WITHOUT ANY WARRANTY; without even the implied  
-  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR     
+
+  This source is distributed in the hope that it will be
+  useful, but WITHOUT ANY WARRANTY; without even the implied
+  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
   PURPOSE.  See the GNU Lesser General Public License for more
-  details.                                                    
-                                                             
-  You should have received a copy of the GNU Lesser General   
-  Public License along with this source; if not, download it  
+  details.
+
+  You should have received a copy of the GNU Lesser General
+  Public License along with this source; if not, download it
   from http://www.gnu.org/licenses/
 */
 
-// The Wishbone widths are defined to match the ones used in the OpenRISC-based MinSoC project.
+// The Wishbone widths are defined to match the ones used in OpenRISC-based projects.
 // If you change them, you may have to adjust the code underneath, especially signal wb_sel_i.
+// For MinSoC, I have used 5 here, for OR10 use 24 (the highest byte is fixed to APP_ADDR_UART).
 // Note that I haven't tested the code with any other values.
 `define UART_DPI_ADDR_WIDTH 5
 // The bus granularity is one byte, use wb_sel_i to select which one of the 4 bytes returned
@@ -97,9 +98,9 @@
 `define UART_DPI_IIR_MS   3'b000 // Modem Status
 
 
-module uart_dpi ( input  wire wb_clk_i, 
+module uart_dpi ( input  wire wb_clk_i,
                   input  wire wb_rst_i,
-                 
+
                   input  wire [`UART_DPI_ADDR_WIDTH-1:0]  wb_adr_i,
                   input  wire [`UART_DPI_DATA_WIDTH-1:0]  wb_dat_i,
                   output wire [`UART_DPI_DATA_WIDTH-1:0]  wb_dat_o,
@@ -132,7 +133,7 @@ module uart_dpi ( input  wire wb_clk_i,
    // identify resource or memory leaks in other parts of the software.
    import "DPI-C" function void uart_dpi_destroy ( input longint obj );
 
-   
+
    parameter tcp_port  = 5678;
    parameter port_name = "UART DPI";
    parameter welcome_message = "Welcome to the UART DPI simulated serial interface.\n\r";
@@ -150,7 +151,7 @@ module uart_dpi ( input  wire wb_clk_i,
    // Error messages cannot be turned off and get printed to stderr.
    parameter print_informational_messages = 1;
 
-     
+
    // ---- UART registers begin.
    reg [7:0] uart_reg_lcr;
    reg [7:0] uart_reg_fcr;
@@ -170,11 +171,11 @@ module uart_dpi ( input  wire wb_clk_i,
    bit       transmitter_holding_register_empty_interrupt_pending;
    int       last_rcvr_fifo_read_clk_counter;  // For the Character Timeout.
 
-   
+
    `define UART_DPI_ERROR_PREFIX       { port_name, " error: " }
    `define UART_DPI_INFORMATION_PREFIX { port_name, ": " }
    `define UART_DPI_TRACE_PREFIX       { port_name, ": " }
-   
+
 
    function int get_trigger_level;
       input [7:0] fcr;
@@ -197,6 +198,7 @@ module uart_dpi ( input  wire wb_clk_i,
       input [3:0]                      sel;
       input [`UART_DPI_DATA_WIDTH-1:0] data;
       begin
+         // TODO: is this comment at the right place here?
          // Alternatively, we could return all 32-bit data for 4 register addresses at a time
          // in wb_dat_o and let the master pick the 8 bits it needs.
 	     case ( sel )
@@ -247,7 +249,7 @@ module uart_dpi ( input  wire wb_clk_i,
                 if ( uart_reg_lcr[ `UART_DPI_LCR_DL ] )
                   begin
                      // $display( "%sWriting to UART_DPI_REG_DL_LS data: 0x%02X", `UART_DPI_TRACE_PREFIX, data_to_write );
-                     
+
                      // Even though we ignore the baud rate, we remember the Divisor Latch register values,
                      // so that the client can read them back.
                      uart_reg_dl_ls <= data_to_write;
@@ -275,14 +277,14 @@ module uart_dpi ( input  wire wb_clk_i,
                      transmitter_holding_register_empty_interrupt_pending <= uart_reg_ier[ `UART_DPI_IER_THRE ];
                   end;
              end
-                 
+
            `UART_DPI_REG_IER:
            // `UART_DPI_REG_DL_MS has the same value as UART_DPI_REG_IER.
              begin
                 if ( uart_reg_lcr[ `UART_DPI_LCR_DL ] )
                   begin
                      // $display( "%sWriting to UART_DPI_REG_DL_MS data: 0x%02X", `UART_DPI_TRACE_PREFIX , data_to_write );
-                     
+
                      // Even though we ignore the baud rate, we remember the Divisor Latch register values,
                      // so that the client can read them back.
                      uart_reg_dl_ms <= data_to_write;
@@ -308,7 +310,7 @@ module uart_dpi ( input  wire wb_clk_i,
                      // The Receiver Line Status interrupt (bit ELSI) has to do with reception errors, but
                      // such errors are never reported by this virtual UART, so this interrupt
                      // will never trigger.
-                           
+
                      uart_reg_ier <= data_to_write;
 
                      // This simulated UART is always ready to accept new data to send. Therefore,
@@ -320,7 +322,7 @@ module uart_dpi ( input  wire wb_clk_i,
                   end;
              end
 
-                 
+
            `UART_DPI_REG_FCR:
            // `UART_DPI_REG_IIR has the same value as `UART_DPI_REG_FCR and is only available when reading.
              begin
@@ -365,7 +367,7 @@ module uart_dpi ( input  wire wb_clk_i,
 
                 uart_reg_fcr <= data_to_write;
              end
-                 
+
            `UART_DPI_REG_LCR:
              begin
                 // Note that only the Divisor Latch Access Bit (DLAB) is considered,
@@ -376,7 +378,7 @@ module uart_dpi ( input  wire wb_clk_i,
                 // text console applications.
                 uart_reg_lcr <= data_to_write;
              end
-                 
+
            `UART_DPI_REG_MCR:
              begin
                 $display( "%sWriting to the UART Modem Control Register (MCR) is not supported.", `UART_DPI_ERROR_PREFIX );
@@ -388,7 +390,7 @@ module uart_dpi ( input  wire wb_clk_i,
                 $display( "%sWriting to the UART Modem Status Register (MSR) is not supported.", `UART_DPI_ERROR_PREFIX );
                 $finish;
              end
-                 
+
            `UART_DPI_REG_LSR:
              begin
                 $display( "%sThe client is trying to write to the UART Line Status Register (LSR), which is intended for factory testing only and discouraged by the UART documentation.", `UART_DPI_ERROR_PREFIX );
@@ -397,7 +399,7 @@ module uart_dpi ( input  wire wb_clk_i,
 
            `UART_DPI_REG_SCR:
              uart_reg_scr <= data_to_write;
-                
+
            default:
              begin
                 $display( "%sDefault case for wb_adr_i=0x%02X, write cycle.", `UART_DPI_ERROR_PREFIX, wb_adr_i );
@@ -405,7 +407,7 @@ module uart_dpi ( input  wire wb_clk_i,
              end
          endcase;
       end
-   endtask   
+   endtask
 
 
    task wishbone_read;
@@ -441,7 +443,7 @@ module uart_dpi ( input  wire wb_clk_i,
                        $display( "%sError receiving data.", `UART_DPI_ERROR_PREFIX );
                        $finish;
                     end;
-                  
+
                   // $display( "%sReceived char data: %c (%d, 0x%02X)",
                   //           `UART_DPI_TRACE_PREFIX,
                   //           data_to_return >= 32 ? data_to_return : 8'd63 /* question mark */,
@@ -463,7 +465,7 @@ module uart_dpi ( input  wire wb_clk_i,
                      data_to_return = uart_reg_ier;
                   end;
              end
-                 
+
            `UART_DPI_REG_IIR:
            // `UART_DPI_REG_FCR has the same value as `UART_DPI_REG_IIR and is only available when writing.
              begin
@@ -499,10 +501,10 @@ module uart_dpi ( input  wire wb_clk_i,
                 // Reading the IIR switches the THRE interrupt off.
                 transmitter_holding_register_empty_interrupt_pending <= 0;
              end
-                 
+
            `UART_DPI_REG_LCR:
              data_to_return = uart_reg_lcr;
-                 
+
            `UART_DPI_REG_MCR:
              begin
                 $display( "%sReading the UART Modem Control Register (MCR) is not supported.", `UART_DPI_ERROR_PREFIX );
@@ -518,7 +520,7 @@ module uart_dpi ( input  wire wb_clk_i,
                 // In case you comment out the error above:
                 data_to_return = 0;
              end
-                 
+
            `UART_DPI_REG_LSR:
              begin
                 // Always say we can accept a new byte. This simulated UART
@@ -542,10 +544,10 @@ module uart_dpi ( input  wire wb_clk_i,
                 if ( received_byte_count > 0 )
                   data_to_return |= (1 << `UART_DPI_LSR_DR);
              end
-                 
+
            `UART_DPI_REG_SCR:
              data_to_return = uart_reg_scr;
-                
+
            default:
              begin
                 $display( "%sDefault case for wb_adr_i=0x%02X, read cycle.", `UART_DPI_ERROR_PREFIX, wb_adr_i );
@@ -555,13 +557,13 @@ module uart_dpi ( input  wire wb_clk_i,
              end
          endcase;
       end
-   endtask   
-   
-   
+   endtask
+
+
    always @(posedge wb_clk_i)
    begin
       int received_byte_count;
-      
+
       // The TCP socket continues to be served even during reset.
       if ( 0 != uart_dpi_tick( obj, received_byte_count ) )
         begin
@@ -579,14 +581,14 @@ module uart_dpi ( input  wire wb_clk_i,
            uart_reg_ier   <= 0;
            uart_reg_dl_ms <= 0;
            uart_reg_dl_ls <= 0;
-          
+
            wb_dat_o       <= 0;
            wb_ack_o       <= 0;
            int_o          <= 0;
-          
+
            transmitter_holding_register_empty_interrupt_pending <= 0;
            last_rcvr_fifo_read_clk_counter <= 0;
-	    end 
+	    end
       else
         begin
            bit receive_data_available_interrupt_pending;
@@ -596,9 +598,9 @@ module uart_dpi ( input  wire wb_clk_i,
            if ( last_rcvr_fifo_read_clk_counter != 0 )
              last_rcvr_fifo_read_clk_counter <= last_rcvr_fifo_read_clk_counter - 1;
 
-           
+
            // Calculate the interrupt request signal, which is independent of the Wishbone bus.
-           
+
            receive_data_available_interrupt_pending = uart_reg_ier[ `UART_DPI_IER_RDA ] &&
                                                       ( received_byte_count >= get_trigger_level( uart_reg_fcr ) );
 
@@ -610,14 +612,14 @@ module uart_dpi ( input  wire wb_clk_i,
            is_interrupt_pending = receive_data_available_interrupt_pending |
                                   character_timeout_interrupt_pending |
                                   transmitter_holding_register_empty_interrupt_pending;
-           
+
            int_o <= is_interrupt_pending;
 
-           
+
            // Default values for the other output signals.
            wb_dat_o <= 0;
            wb_ack_o <= 0;
-           
+
 
            if ( wb_cyc_i &&
                 wb_stb_i &&
@@ -631,11 +633,11 @@ module uart_dpi ( input  wire wb_clk_i,
                      bit [7:0] data_to_write;
 
                      data_to_write = get_data_to_write( wb_sel_i, wb_dat_i );
-                     
+
                      wishbone_write( data_to_write );
 
                      // $display( "%sWriting cycle, addr: 0x%X, data: %c",
-                     //           `UART_DPI_TRACE_PREFIX, 
+                     //           `UART_DPI_TRACE_PREFIX,
                      //           wb_adr_i,
                      //           data_to_write );
                   end
@@ -649,7 +651,7 @@ module uart_dpi ( input  wire wb_clk_i,
                                     data_to_return );
 
                      // $display( "%sReading cycle, addr: 0x%08X, value returned: 0x%02X",
-                     //           `UART_DPI_TRACE_PREFIX, 
+                     //           `UART_DPI_TRACE_PREFIX,
                      //           wb_adr_i,
                      //           data_to_return );
 
@@ -658,7 +660,7 @@ module uart_dpi ( input  wire wb_clk_i,
              end;
         end;
    end;
-   
+
    initial
      begin
         obj = 0;
@@ -682,5 +684,5 @@ module uart_dpi ( input  wire wb_clk_i,
         // This is optional, but can help find resource or memory leaks in other parts of the software.
         uart_dpi_destroy( obj );
      end
-   
+
 endmodule
