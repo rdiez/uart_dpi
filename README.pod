@@ -21,7 +21,7 @@ However, the POD syntax is quite simple and can be edited with a standard text e
 
 =head2 Introduction
 
-Version 0.80 beta, November 2011.
+Version 0.82 beta, November 2011.
 
 When you start developing a new System-on-a-Chip (SoC) in Verilog for an FPGA (for example),
 a serial port comes in very handy, as it is easy to implement and it allows you to interact with the system

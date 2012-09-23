@@ -1,7 +1,7 @@
 
 // UART client example for the UART DPI module.
 //
-// Version 0.80 beta, November 2011.
+// Version 0.82 beta, November 2011.
 //
 // This example code has been tested with the OpenRISC MinSoC project,
 // but should be easy to port to other platforms.
