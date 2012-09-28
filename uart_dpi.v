@@ -27,26 +27,10 @@
 
 // The Wishbone widths are defined to match the ones used in OpenRISC-based projects.
 // If you change them, you may have to adjust the code underneath, especially signal wb_sel_i.
-// For MinSoC, I have used 5 here, for OR10 use 24 (the highest byte is fixed to APP_ADDR_UART).
-// Note that I haven't tested the code with any other values.
-`define UART_DPI_ADDR_WIDTH 5
+// See also UART_DPI_ADDR_WIDTH below.
 // The bus granularity is one byte, use wb_sel_i to select which one of the 4 bytes returned
 // holds the data requested.
 `define UART_DPI_DATA_WIDTH 32
-
-// Register addresses, note that a few registers are actually mapped to the same address.
-`define UART_DPI_REG_RBR   `UART_DPI_ADDR_WIDTH'd0 // Receiver buffer
-`define UART_DPI_REG_THR   `UART_DPI_ADDR_WIDTH'd0 // Transmitter
-`define UART_DPI_REG_IER   `UART_DPI_ADDR_WIDTH'd1 // Interrupt enable
-`define UART_DPI_REG_IIR   `UART_DPI_ADDR_WIDTH'd2 // Interrupt identification
-`define UART_DPI_REG_FCR   `UART_DPI_ADDR_WIDTH'd2 // FIFO control
-`define UART_DPI_REG_LCR   `UART_DPI_ADDR_WIDTH'd3 // Line Control
-`define UART_DPI_REG_MCR   `UART_DPI_ADDR_WIDTH'd4 // Modem control
-`define UART_DPI_REG_LSR   `UART_DPI_ADDR_WIDTH'd5 // Line status
-`define UART_DPI_REG_MSR   `UART_DPI_ADDR_WIDTH'd6 // Modem status
-`define UART_DPI_REG_SCR   `UART_DPI_ADDR_WIDTH'd7 // Scratch register
-`define UART_DPI_REG_DL_LS `UART_DPI_ADDR_WIDTH'd0 // Divisor latch
-`define UART_DPI_REG_DL_MS `UART_DPI_ADDR_WIDTH'd1 // Divisor latch
 
 // Divisor Latch access bit in UART_DPI_REG_LCR.
 `define UART_DPI_LCR_DL 7
@@ -98,12 +82,39 @@
 `define UART_DPI_IIR_MS   3'b000 // Modem Status
 
 
-module uart_dpi ( input  wire wb_clk_i,
+module uart_dpi
+               #(
+                 // For MinSoC, I have used a UART_DPI_ADDR_WIDTH of 5 here (the minimum width),
+                 // which means that some address bits will be ignored and the UART registers will
+                 // be accessible at multiple addresses (in blocks of 2^5 addresses).
+                 // For OR10 I have used a UART_DPI_ADDR_WIDTH of 24.
+                 // Keep in mind that the highest address byte [31:24] is usually fixed to APP_ADDR_UART
+                 // for OpenRISC SoC designs.
+                 // Note that I haven't tested the code with any other values.
+                 UART_DPI_ADDR_WIDTH = 5,
+                 tcp_port  = 5678,
+                 port_name = "UART DPI",
+                 welcome_message = "Welcome to the UART DPI simulated serial interface.\n\r",
+                 character_timeout_clk_count = 100,  // See the README file on how to calculate this accurately, should you need it.
+
+                 // Whether the TCP server listens on localhost / 127.0.0.1 only. Otherwise,
+                 // it listens on all IP addresses, which means any computer
+                 // in the network can connect to the UART DPI module.
+                 parameter listen_on_local_addr_only = 1,
+
+                 parameter receive_buffer_size  = (100 * 1024),
+                 parameter transmit_buffer_size = (100 * 1024),
+
+                 // Whether the C++ side prints informational messages to stdout.
+                 // Error messages cannot be turned off and get printed to stderr.
+                 parameter print_informational_messages = 1
+                )
+                ( input  wire wb_clk_i,
                   input  wire wb_rst_i,
 
-                  input  wire [`UART_DPI_ADDR_WIDTH-1:0]  wb_adr_i,
-                  input  wire [`UART_DPI_DATA_WIDTH-1:0]  wb_dat_i,
-                  output wire [`UART_DPI_DATA_WIDTH-1:0]  wb_dat_o,
+                  input  wire [UART_DPI_ADDR_WIDTH-1:0]  wb_adr_i,
+                  input  wire [`UART_DPI_DATA_WIDTH-1:0] wb_dat_i,
+                  output wire [`UART_DPI_DATA_WIDTH-1:0] wb_dat_o,
 
                   input  wire       wb_we_i,
                   input  wire       wb_stb_i,
@@ -134,22 +145,19 @@ module uart_dpi ( input  wire wb_clk_i,
    import "DPI-C" function void uart_dpi_destroy ( input longint obj );
 
 
-   parameter tcp_port  = 5678;
-   parameter port_name = "UART DPI";
-   parameter welcome_message = "Welcome to the UART DPI simulated serial interface.\n\r";
-   parameter character_timeout_clk_count = 100;  // See the README file on how to calculate this accurately, should you need it.
-
-   // Whether the TCP server listens on localhost / 127.0.0.1 only. Otherwise,
-   // it listens on all IP addresses, which means any computer
-   // in the network can connect to the UART DPI module.
-   parameter listen_on_local_addr_only = 1;
-
-   parameter receive_buffer_size  = (100 * 1024);
-   parameter transmit_buffer_size = (100 * 1024);
-
-   // Whether the C++ side prints informational messages to stdout.
-   // Error messages cannot be turned off and get printed to stderr.
-   parameter print_informational_messages = 1;
+   // Register addresses, note that a few registers are actually mapped to the same address.
+   localparam UART_DPI_REG_RBR   = 0; // Receiver buffer
+   localparam UART_DPI_REG_THR   = 0; // Transmitter
+   localparam UART_DPI_REG_IER   = 1; // Interrupt enable
+   localparam UART_DPI_REG_IIR   = 2; // Interrupt identification
+   localparam UART_DPI_REG_FCR   = 2; // FIFO control
+   localparam UART_DPI_REG_LCR   = 3; // Line Control
+   localparam UART_DPI_REG_MCR   = 4; // Modem control
+   localparam UART_DPI_REG_LSR   = 5; // Line status
+   localparam UART_DPI_REG_MSR   = 6; // Modem status
+   localparam UART_DPI_REG_SCR   = 7; // Scratch register
+   localparam UART_DPI_REG_DL_LS = 0; // Divisor latch, same address as UART_DPI_REG_THR.
+   localparam UART_DPI_REG_DL_MS = 1; // Divisor latch, same address as UART_DPI_REG_IER.
 
 
    // ---- UART registers begin.
@@ -242,7 +250,7 @@ module uart_dpi ( input  wire wb_clk_i,
       input [7:0] data_to_write;
       begin
          case ( wb_adr_i )
-           `UART_DPI_REG_THR:
+           UART_DPI_REG_THR:
            // `UART_DPI_REG_RBR has the same value as UART_DPI_REG_THR and is only available when reading.
            // `UART_DPI_REG_DL_LS has the same value as UART_DPI_REG_THR.
              begin
@@ -278,7 +286,7 @@ module uart_dpi ( input  wire wb_clk_i,
                   end;
              end
 
-           `UART_DPI_REG_IER:
+           UART_DPI_REG_IER:
            // `UART_DPI_REG_DL_MS has the same value as UART_DPI_REG_IER.
              begin
                 if ( uart_reg_lcr[ `UART_DPI_LCR_DL ] )
@@ -323,7 +331,7 @@ module uart_dpi ( input  wire wb_clk_i,
              end
 
 
-           `UART_DPI_REG_FCR:
+           UART_DPI_REG_FCR:
            // `UART_DPI_REG_IIR has the same value as `UART_DPI_REG_FCR and is only available when reading.
              begin
                 // $display( "%sWriting to UART_DPI_REG_FCR data: 0x%02X", `UART_DPI_TRACE_PREFIX, data_to_write );
@@ -368,7 +376,7 @@ module uart_dpi ( input  wire wb_clk_i,
                 uart_reg_fcr <= data_to_write;
              end
 
-           `UART_DPI_REG_LCR:
+           UART_DPI_REG_LCR:
              begin
                 // Note that only the Divisor Latch Access Bit (DLAB) is considered,
                 // all other line settings (like parity or number of stop bits) are ignored.
@@ -379,25 +387,25 @@ module uart_dpi ( input  wire wb_clk_i,
                 uart_reg_lcr <= data_to_write;
              end
 
-           `UART_DPI_REG_MCR:
+           UART_DPI_REG_MCR:
              begin
                 $display( "%sWriting to the UART Modem Control Register (MCR) is not supported.", `UART_DPI_ERROR_PREFIX );
                 $finish;
              end
 
-           `UART_DPI_REG_MSR:
+           UART_DPI_REG_MSR:
              begin
                 $display( "%sWriting to the UART Modem Status Register (MSR) is not supported.", `UART_DPI_ERROR_PREFIX );
                 $finish;
              end
 
-           `UART_DPI_REG_LSR:
+           UART_DPI_REG_LSR:
              begin
                 $display( "%sThe client is trying to write to the UART Line Status Register (LSR), which is intended for factory testing only and discouraged by the UART documentation.", `UART_DPI_ERROR_PREFIX );
                 $finish;
              end
 
-           `UART_DPI_REG_SCR:
+           UART_DPI_REG_SCR:
              uart_reg_scr <= data_to_write;
 
            default:
@@ -417,7 +425,7 @@ module uart_dpi ( input  wire wb_clk_i,
       output bit [7:0] data_to_return;
       begin
          case ( wb_adr_i )
-           `UART_DPI_REG_RBR:
+           UART_DPI_REG_RBR:
            // UART_DPI_REG_THR has the same value as UART_DPI_REG_RBR and is only available when writing.
            // UART_DPI_REG_DL_LS has the same value as UART_DPI_REG_RBR.
              if ( uart_reg_lcr[ `UART_DPI_LCR_DL ] )
@@ -453,7 +461,7 @@ module uart_dpi ( input  wire wb_clk_i,
                   last_rcvr_fifo_read_clk_counter <= character_timeout_clk_count;
                end
 
-           `UART_DPI_REG_IER:
+           UART_DPI_REG_IER:
            // UART_DPI_REG_DL_MS has the same value as UART_DPI_REG_IER.
              begin
                 if ( uart_reg_lcr[ `UART_DPI_LCR_DL ] )
@@ -466,7 +474,7 @@ module uart_dpi ( input  wire wb_clk_i,
                   end;
              end
 
-           `UART_DPI_REG_IIR:
+           UART_DPI_REG_IIR:
            // `UART_DPI_REG_FCR has the same value as `UART_DPI_REG_IIR and is only available when writing.
              begin
                 // About interrupts:
@@ -502,10 +510,10 @@ module uart_dpi ( input  wire wb_clk_i,
                 transmitter_holding_register_empty_interrupt_pending <= 0;
              end
 
-           `UART_DPI_REG_LCR:
+           UART_DPI_REG_LCR:
              data_to_return = uart_reg_lcr;
 
-           `UART_DPI_REG_MCR:
+           UART_DPI_REG_MCR:
              begin
                 $display( "%sReading the UART Modem Control Register (MCR) is not supported.", `UART_DPI_ERROR_PREFIX );
                 $finish;
@@ -513,7 +521,7 @@ module uart_dpi ( input  wire wb_clk_i,
                 data_to_return = 0;
              end
 
-           `UART_DPI_REG_MSR:
+           UART_DPI_REG_MSR:
              begin
                 $display( "%sReading the UART Modem Status Register (MSR) is not supported.", `UART_DPI_ERROR_PREFIX );
                 $finish;
@@ -521,7 +529,7 @@ module uart_dpi ( input  wire wb_clk_i,
                 data_to_return = 0;
              end
 
-           `UART_DPI_REG_LSR:
+           UART_DPI_REG_LSR:
              begin
                 // Always say we can accept a new byte. This simulated UART
                 // appears unnaturally fast to the user.
@@ -545,7 +553,7 @@ module uart_dpi ( input  wire wb_clk_i,
                   data_to_return |= (1 << `UART_DPI_LSR_DR);
              end
 
-           `UART_DPI_REG_SCR:
+           UART_DPI_REG_SCR:
              data_to_return = uart_reg_scr;
 
            default:
