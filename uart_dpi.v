@@ -1,5 +1,5 @@
 
-/* Version 0.82 beta, November 2011.
+/* Version 0.84 beta, November 2011.
 
   See the README file for information about this module.
 
@@ -110,7 +110,7 @@ module uart_dpi
                  parameter print_informational_messages = 1
                 )
                 ( input  wire wb_clk_i,
-                  input  wire wb_rst_i,
+                  input  wire wb_rst_i,  // There is no need to assert reset at the beginning.
 
                   input  wire [UART_DPI_ADDR_WIDTH-1:0]  wb_adr_i,
                   input  wire [`UART_DPI_DATA_WIDTH-1:0] wb_dat_i,
@@ -246,7 +246,7 @@ module uart_dpi
    endfunction;
 
 
-   task wishbone_write;
+   task automatic wishbone_write;
       input [7:0] data_to_write;
       begin
          case ( wb_adr_i )
@@ -418,7 +418,7 @@ module uart_dpi
    endtask
 
 
-   task wishbone_read;
+   task automatic wishbone_read;
       input  int received_byte_count;
       input  bit receive_data_available_interrupt_pending;
       input  bit character_timeout_interrupt_pending;
@@ -568,6 +568,25 @@ module uart_dpi
    endtask
 
 
+   task automatic initial_reset;
+      begin
+         uart_reg_lcr   = 0;
+         uart_reg_fcr   = 0;
+         uart_reg_scr   = 0;
+         uart_reg_ier   = 0;
+         uart_reg_dl_ms = 0;
+         uart_reg_dl_ls = 0;
+
+         wb_dat_o       = 0;
+         wb_ack_o       = 0;
+         int_o          = 0;
+
+         transmitter_holding_register_empty_interrupt_pending = 0;
+         last_rcvr_fifo_read_clk_counter = 0;
+      end
+   endtask
+
+
    always @(posedge wb_clk_i)
    begin
       int received_byte_count;
@@ -581,6 +600,8 @@ module uart_dpi
 
       if ( wb_rst_i )
         begin
+           // NOTE: If you modify the reset logic, please update the initial_reset task too.
+
            // According to the 16550 documentation, the chip's master reset does not clear
            // the Receiver Buffer, the Transmitter Holding and the Divisor Latches.
            uart_reg_lcr   <= 0;
@@ -685,6 +706,8 @@ module uart_dpi
              $display( "%sError creating the object instance.", `UART_DPI_ERROR_PREFIX );
              $finish;
           end;
+
+        initial_reset;
      end
 
    final
