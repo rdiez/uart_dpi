@@ -1,5 +1,5 @@
 
-/* Version 0.84 beta, November 2011.
+/* Version 0.84 beta, October 2012.
 
   See the README file for information about this module.
 
@@ -107,7 +107,9 @@ module uart_dpi
 
                  // Whether the C++ side prints informational messages to stdout.
                  // Error messages cannot be turned off and get printed to stderr.
-                 parameter print_informational_messages = 1
+                 parameter print_informational_messages = 1,
+
+                 TRACE_DATA = 0
                 )
                 ( input  wire wb_clk_i,
                   input  wire wb_rst_i,  // There is no need to assert reset at the beginning.
@@ -264,11 +266,12 @@ module uart_dpi
                   end
                 else
                   begin
-                     /*$display( "%sWriting char data: %c (%d, 0x%02X)",
+                     if ( TRACE_DATA )
+                       $display( "%sWriting char data: %c (%d, 0x%02X)",
                                  `UART_DPI_TRACE_PREFIX,
                                  data_to_write >= 32 ? data_to_write : 8'd63, // show a question mark for weird codes
                                  data_to_write,
-                                 data_to_write );*/
+                                 data_to_write );
 
                      if ( 0 != uart_dpi_send( obj, data_to_write ) )
                        begin
@@ -452,11 +455,12 @@ module uart_dpi
                        $finish;
                     end;
 
-                  // $display( "%sReceived char data: %c (%d, 0x%02X)",
-                  //           `UART_DPI_TRACE_PREFIX,
-                  //           data_to_return >= 32 ? data_to_return : 8'd63 /* question mark */,
-                  //           data_to_return,
-                  //           data_to_return );
+                  if ( TRACE_DATA )
+                    $display( "%sReceived char data: %c (%d, 0x%02X)",
+                              `UART_DPI_TRACE_PREFIX,
+                              data_to_return >= 32 ? data_to_return : 8'd63 /* question mark */,
+                              data_to_return,
+                              data_to_return );
 
                   last_rcvr_fifo_read_clk_counter <= character_timeout_clk_count;
                end
