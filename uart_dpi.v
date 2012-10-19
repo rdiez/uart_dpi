@@ -122,6 +122,7 @@ module uart_dpi
                   input  wire       wb_stb_i,
                   input  wire       wb_cyc_i,
                   output wire       wb_ack_o,
+                  output wire       wb_err_o,  // Never set, any attempt to use an invalid address terminates the simulation.
                   input  wire [3:0] wb_sel_i,
 
                   output wire       int_o  // UART interrupt request
@@ -583,6 +584,7 @@ module uart_dpi
 
          wb_dat_o       = 0;
          wb_ack_o       = 0;
+         wb_err_o       = 0;
          int_o          = 0;
 
          transmitter_holding_register_empty_interrupt_pending = 0;
@@ -617,6 +619,7 @@ module uart_dpi
 
            wb_dat_o       <= 0;
            wb_ack_o       <= 0;
+           wb_err_o       <= 0;
            int_o          <= 0;
 
            transmitter_holding_register_empty_interrupt_pending <= 0;
