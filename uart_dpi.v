@@ -1,5 +1,5 @@
 
-/* Version 0.84 beta, October 2012.
+/* Version 0.85 beta, October 2012.
 
   See the README file for information about this module.
 
@@ -129,7 +129,7 @@ module uart_dpi
                   input  wire       wb_stb_i,
                   input  wire       wb_cyc_i,
                   output wire       wb_ack_o,
-                  output wire       wb_err_o,  // Never set, any attempt to use an invalid address terminates the simulation.
+                  output wire       wb_err_o,
                   input  wire [3:0] wb_sel_i,
 
                   output wire       int_o  // UART interrupt request
@@ -426,8 +426,9 @@ module uart_dpi
 
            default:
              begin
-                $display( "%sDefault case for wb_adr_i=0x%02X, write cycle.", `UART_DPI_ERROR_PREFIX, wb_adr_i );
-                $finish;
+                $display( "%sInvalid Wishbone address 0x%08X, write cycle. Reported as a bus error by asserting wb_err_o.", `UART_DPI_ERROR_PREFIX, wb_adr_i );
+                wb_ack_o <= 0;
+                wb_err_o <= 1;
              end
          endcase;
       end
@@ -575,10 +576,10 @@ module uart_dpi
 
            default:
              begin
-                $display( "%sDefault case for wb_adr_i=0x%02X, read cycle.", `UART_DPI_ERROR_PREFIX, wb_adr_i );
-                $finish;
-                // In case you comment out the error above:
-                data_to_return = 0;
+                $display( "%sInvalid Wishbone address 0x%08X, read cycle. Reported as a bus error by asserting wb_err_o.", `UART_DPI_ERROR_PREFIX, wb_adr_i );
+                data_to_return = {8{1'bx}};
+                wb_ack_o <= 0;
+                wb_err_o <= 1;
              end
          endcase;
       end
@@ -667,14 +668,19 @@ module uart_dpi
            // Default values for the other output signals.
            wb_dat_o <= 0;
            wb_ack_o <= 0;
+           wb_err_o <= 0;
 
-
-           if ( wb_cyc_i &&
-                wb_stb_i &&
-                !wb_ack_o  // If we answered in the last cycle, finish the transaction in this one by clearing wb_ack_o.
+           if ( wb_cyc_i  &&
+                wb_stb_i  &&
+                !wb_ack_o && // If we answered in the last cycle, finish the transaction in this one by clearing wb_ack_o.
+                !wb_err_o
              )
              begin
-                wb_ack_o <= 1;  // We can always answer straight away, without delays.
+                // We can always answer straight away, without delays. By default,
+                // prepare the "OK" answer. This can be overwritten below
+                // if the Wishbone address is invalid.
+                wb_ack_o <= 1;
+                wb_err_o <= 0;
 
                 if ( wb_we_i )
                   begin

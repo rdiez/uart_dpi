@@ -21,7 +21,7 @@ However, the POD syntax is quite simple and can be edited with a standard text e
 
 =head2 Introduction
 
-Version 0.82 beta, November 2011.
+Version 0.83 beta, November 2011.
 
 When you start developing a new System-on-a-Chip (SoC) in Verilog for an FPGA (for example),
 a serial port comes in very handy, as it is easy to implement and it allows you to interact with the system
@@ -329,6 +329,7 @@ its Verilog module to some Wishbone master. Here is an instantiation example:
 	.wb_stb_i	( wb_us2_stb_i ),
 	.wb_cyc_i	( wb_us2_cyc_i ),
 	.wb_ack_o	( wb_us2_ack_o ),
+	.wb_err_o	( wb_us2_err_o ),
 	.wb_sel_i	( wb_us2_sel_i ),
 
 	// Interrupt request
