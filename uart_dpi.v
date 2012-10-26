@@ -60,12 +60,19 @@
 `define UART_DPI_LSR_TEMT 6  // Transmitter Empty indicator
 `define UART_DPI_LSR_EI   7  // Error in receive FIFO
 
- // Interrupt Enable register bits.
+ // Interrupt Enable Register bits.
 `define UART_DPI_IER_RDA  0 // Received Data available interrupt
 `define UART_DPI_IER_THRE 1 // Transmitter Holding Register empty interrupt
 `define UART_DPI_IER_RLS  2 // Receiver Line Status interrupt
 `define UART_DPI_IER_MS   3 // Modem Status interrupt
 `define UART_DPI_IER_MASK_REST 8'b11110000
+
+// Modem Control Register bits
+`define UART_DPI_MC_DTR  0
+`define UART_DPI_MC_RTS  1
+`define UART_DPI_MC_OUT1 2
+`define UART_DPI_MC_OUT2 3
+`define UART_DPI_MC_LB   4   // Loopback mode
 
 // Interrupt Identification Register bits.
 `define UART_DPI_IIR_IP             0  // Interrupt pending (bit value: 0=pending, 1=not pending)
@@ -393,8 +400,13 @@ module uart_dpi
 
            UART_DPI_REG_MCR:
              begin
-                $display( "%sWriting to the UART Modem Control Register (MCR) is not supported.", `UART_DPI_ERROR_PREFIX );
-                $finish;
+                // Ignore a particular value where only the RTS bit is set, see the readme file for details.
+                if ( data_to_write != ( 1 << `UART_DPI_MC_RTS ) )
+                  begin
+                     $display( "%sWriting to the UART Modem Control Register (MCR) is not supported, the value was 0x%02X.",
+                               `UART_DPI_ERROR_PREFIX, data_to_write );
+                     $finish;
+                  end
              end
 
            UART_DPI_REG_MSR:

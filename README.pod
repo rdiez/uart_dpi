@@ -267,6 +267,12 @@ only RBR reads can reset the time-out timer.
 
 =item * There is no MODEM support at all.
 
+Writes to the MCR are not supported and trigger an assert. However, writes to MCR
+with the particular value 0x02 (which corresponds to setting RTS only) are ignored.
+
+The OpenRISC port of eCos' Redboot sets RTS at the beginning and leaves it always set.
+This is allowed in the standard and is probably also done by other software in the same way.
+
 =item * Most UART serial port settings are ignored.
 
 There is no baud rate, stop bit configuration, parity bit and so on. All bytes have always 8 bits.
